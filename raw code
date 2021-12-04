@@ -1,0 +1,601 @@
+import numpy as np
+import pandas as pd
+from sklearn import preprocessing
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import MinMaxScaler
+from keras.models import Sequential
+from keras.layers import Dense
+from keras.layers import LSTM
+from keras.layers import Dropout
+
+from tensorflow.keras.utils import plot_model
+
+import datetime as dt
+import matplotlib.pyplot as plt
+%matplotlib inline
+import plotly.express as px
+import seaborn as sns
+
+------------------------------------------------------------------------------------------------------------
+
+#Loading the dataset 
+#preparing a dataset
+data = pd.read_csv('cryptocurrency_markets.csv', date_parser= True)
+data.tail()
+data.head()
+
+#showcase data types in the dataframe
+data.info()
+
+#showcasing the 6 different cryptocurrencies in the dataset
+data['Name'].value_counts()
+
+#data cleaning
+#check for duplicates and missing values
+sum(data.duplicated())
+data.isnull().sum()
+
+##Data Exploration
+bitcoin=data[data['Name']=='Bitcoin']
+ethereum=data[data['Name']=='Ethereum']
+dogecoin=data[data['Name']=='Dogecoin']
+litecoin=data[data['Name']=='Litecoin']
+binancecoin= data[data['Name']=='Binance Coin']
+cardano= data[data['Name']=='Cardano']
+
+data['market_cap'] = data[' Marketcap ']/1000000
+
+# plot market capitalization
+
+plt.legend()
+plt.xlabel('time')
+plt.title('Cryptocurrency Market Cap (Million USD)')
+plt.show()
+
+
+fig1= px.line(data, x='Date', y='market_cap', color='Name', title= 'Cryptocurrency Market Cap (USD Millions)')
+fig1.show()
+
+#plotting this will help us visualize which currency is the most traded.
+data['price_diff']= data[' Close ']-data[' Open ']
+
+
+
+#price_diff= ((bitcoin['price_diff']).plot(color='blue', label='Bitcoin'), (Etheruem['price_diff']).plot(color='green', label='Etheruem'), 
+             #(Dogecoin['price_diff']).plot(color='red', label='Dogecoin'), (Litecoin['price_diff']).plot(color='orange', label='Litecoin'), 
+             #(BinanceCoin['price_diff']).plot(color='grey', label='Binance Coin'), (Cardano['price_diff']).plot(color='violet', label='Cardano'))
+
+fig2 = px.line(data, x='Date', y="price_diff", color='Name', title= 'Historical difference between closing and opening price  of Crypto since 2017')
+fig2.show()
+
+#This shows us the Bitcoin has the highest spread in the differences of the closing and opening prices.
+
+#daily average : difference between High and low prices for each day
+data['daily_price_spread'] = data[' High '] - data [' Low ']
+
+fig3 = px.line(data, x='Date', y='daily_price_spread', color='Name', title= 'Historical difference between high and low prices of Crypto')
+fig3.show()
+
+#Applying Machine Learning Models
+#Building RNN-LSTM model 
+
+
+##Bitcoin
+
+bitcoin=data[data['Name']=='Bitcoin'].copy()
+#Btc Training dataset
+btc_train = bitcoin[bitcoin['Date']<'2020-01-01'].copy()
+btc_train
+#Btc Test dataset
+btc_test= bitcoin[bitcoin['Date']>'2020-01-01'].copy()
+btc_test
+
+#Filtering for Open, Close, High, Low, and Volume columns for the training 
+#bitcoin
+
+training_btc = btc_train.drop(['Name', 'Symbol', 'Date', ' Marketcap ', 'market_cap', 'price_diff', 'daily_price_spread'], axis= 1)
+training_btc.head()
+
+#normalizing the training set for btc
+#scaling the training data
+scaler = MinMaxScaler()
+
+#btc
+training_btc = scaler.fit_transform(training_btc)
+training_btc
+
+#Building LSTM model for BTC: model1
+X1_train = []
+Y1_train=[]
+
+for i in range(60, len(training_btc)):
+  X1_train.append(training_btc[i-60:i])
+  Y1_train.append(training_btc[i,0])
+
+X1_train, Y1_train = np.array(X1_train), np.array(Y1_train)
+X1_train.shape
+
+model1= Sequential()
+model1.add(LSTM(units = 50, return_sequences=True, input_shape = (X1_train.shape[1], 5)))
+model1.add(Dropout(0.2))
+model1.add(LSTM(units = 50, return_sequences=True))
+model1.add(Dropout(0.2))
+model1.add(LSTM(units = 50, return_sequences=True))
+model1.add(Dropout(0.2))
+model1.add(LSTM(units = 50, return_sequences=True))
+model1.add(Dropout(0.2))
+model1.add(LSTM(units = 50))
+model1.add(Dense(units = 1))
+
+
+model1.summary()
+
+model1.compile(optimizer = 'adam', loss = 'mean_squared_error')
+model1.fit(X1_train, Y1_train, epochs = 30, batch_size =50)
+
+##Testing for bitcoin
+
+past = btc_train.tail(60)
+past_btc_df = past.append(btc_test, ignore_index=True)
+past_btc_df= past_btc_df.drop(['Name', 'Symbol', 'Date', ' Marketcap ', 'market_cap', 'price_diff', 'daily_price_spread'], axis =1)
+past_btc_df.head()
+
+testing_btc = scaler.transform(past_btc_df)
+
+X1_test =[]
+Y1_test =[]
+
+for i in range(60, len(testing_btc)):
+  X1_test.append(testing_btc[i-60:i])
+  Y1_test.append(testing_btc[i,0])
+
+X1_test, Y1_test = np.array(X1_test), np.array(Y1_test)
+X1_test.shape, Y1_test.shape
+
+Y1_pred= model1.predict(X1_test)
+Y1_pred, Y1_test
+
+scaler.scale_
+
+scale1 = 1/5.19057454e-05
+scale1
+
+Y1_test = Y1_test*scale1
+Y1_pred = Y1_pred*scale1
+
+plt.figure(figsize=(20,10))
+plt.plot(Y1_test, color = 'red', label = 'Real Bitcoin Price')
+plt.plot(Y1_pred, color = 'green', label = 'Predicted Bitcoin Price')
+plt.title('Bitcoin Price Prediction using RNN-LSTM')
+plt.xlabel('Time')
+plt.ylabel('Price')
+plt.legend()
+plt.show()
+----------------------------------------------
+#Ethereum
+
+ethereum=data[data['Name']=='Ethereum'].copy()
+eth_train = ethereum[ethereum['Date']<'2020-01-01'].copy()
+eth_train
+eth_test= ethereum[ethereum['Date']>'2020-01-01'].copy()
+eth_test
+
+
+#ETH
+training_eth = eth_train.drop(['Name', 'Symbol', 'Date', ' Marketcap ', 'market_cap', 'price_diff', 'daily_price_spread'], axis= 1)
+training_eth.head()
+
+#Normalization for ETH
+scaler = MinMaxScaler()
+
+training_eth = scaler.fit_transform(training_eth)
+training_eth
+
+X2_train = []
+Y2_train=[]
+
+for i in range(60, len(training_eth)):
+  X2_train.append(training_eth[i-60:i])
+  Y2_train.append(training_eth[i,0])
+
+X2_train, Y2_train = np.array(X2_train), np.array(Y2_train)
+X2_train.shape
+
+model2= Sequential()
+model2.add(LSTM(units = 50, return_sequences=True, input_shape = (X2_train.shape[1], 5)))
+model2.add(Dropout(0.2))
+model2.add(LSTM(units = 50, return_sequences=True))
+model2.add(Dropout(0.2))
+model2.add(LSTM(units = 50, return_sequences=True))
+model2.add(Dropout(0.2))
+model2.add(LSTM(units = 50, return_sequences=True))
+model2.add(Dropout(0.2))
+model2.add(LSTM(units = 50))
+model2.add(Dense(units = 1))
+
+
+model2.summary()
+
+model2.compile(optimizer = 'adam', loss = 'mean_squared_error')
+
+model2.fit(X2_train, Y2_train, epochs = 20, batch_size =32)
+
+#Testing for Ethereum
+
+past2 = eth_train.tail(60)
+past_eth_df = past2.append(eth_test, ignore_index=True)
+past_eth_df= past_eth_df.drop(['Name', 'Symbol', 'Date', ' Marketcap ', 'market_cap', 'price_diff', 'daily_price_spread'], axis =1)
+past_eth_df.head()
+
+
+
+testing_eth = scaler.transform(past_eth_df)
+
+X2_test =[]
+Y2_test =[]
+
+for i in range(60, len(testing_eth)):
+  X2_test.append(testing_eth[i-60:i])
+  Y2_test.append(testing_eth[i,0])
+
+X2_test, Y2_test = np.array(X2_test), np.array(Y2_test)
+X2_test.shape, Y2_test.shape
+
+Y2_pred= model2.predict(X2_test)
+Y2_pred, Y2_test
+
+scaler.scale_
+
+scale2 = 1/5.00000000e+01
+scale2
+
+Y2_test = Y2_test*scale2
+Y2_pred = Y2_pred*scale2
+
+plt.figure(figsize=(15,12))
+plt.plot(Y2_test, color = 'red', label = 'Actual Ethereum Price')
+plt.plot(Y2_pred, color = 'green', label = 'Predicted Ethereum Price')
+plt.title('Ethereum Price Prediction')
+plt.xlabel('Time')
+plt.ylabel('Price')
+plt.legend()
+plt.show()
+---------------------------------------------------------------------------------
+
+
+##Dogecoin
+
+#dogecoin
+dogecoin=data[data['Name']=='Dogecoin'].copy()
+doge_train= dogecoin[dogecoin['Date']<'2020-01-01'].copy()
+doge_train
+doge_test= dogecoin[dogecoin['Date']>'2020-01-01'].copy()
+doge_test
+
+#Training for DOGE
+training_doge = doge_train.drop(['Name', 'Symbol', 'Date', ' Marketcap ', 'market_cap', 'price_diff', 'daily_price_spread'], axis= 1)
+training_doge.head()
+
+scaler = MinMaxScaler()
+
+training_doge = scaler.fit_transform(training_doge)
+training_doge
+
+X3_train = []
+Y3_train=[]
+
+for i in range(60, len(training_doge)):
+  X3_train.append(training_doge[i-60:i])
+  Y3_train.append(training_doge[i,0])
+
+X3_train, Y3_train = np.array(X3_train), np.array(Y3_train)
+X3_train.shape
+
+model3= Sequential()
+model3.add(LSTM(units = 50, return_sequences=True, input_shape = (X3_train.shape[1], 5)))
+model3.add(Dropout(0.2))
+model3.add(LSTM(units = 50, return_sequences=True))
+model3.add(Dropout(0.2))
+model3.add(LSTM(units = 50, return_sequences=True))
+model3.add(Dropout(0.2))
+model3.add(LSTM(units = 50, return_sequences=True))
+model3.add(Dropout(0.2))
+model3.add(LSTM(units = 50))
+model3.add(Dense(units = 1))
+
+
+model3.summary()
+
+model3.compile(optimizer = 'adam', loss = 'mean_squared_error')
+model3.fit(X3_train, Y3_train, epochs = 30, batch_size =32)
+
+past3 = doge_train.tail(60)
+past_doge_df = past3.append(doge_test, ignore_index=True)
+past_doge_df= past_doge_df.drop(['Name', 'Symbol', 'Date', ' Marketcap ', 'market_cap', 'price_diff', 'daily_price_spread'], axis =1)
+past_doge_df.head()
+
+testing_doge = scaler.transform(past_doge_df)
+
+X3_test =[]
+Y3_test =[]
+
+for i in range(60, len(testing_doge)):
+  X3_test.append(testing_doge[i-60:i])
+  Y3_test.append(testing_doge[i,0])
+
+X3_test, Y3_test = np.array(X3_test), np.array(Y3_test)
+X3_test.shape, Y3_test.shape
+
+Y3_pred= model3.predict(X3_test)
+Y3_pred, Y3_test
+
+scaler.scale_
+
+scale3 = 1/5.00000000e+01
+scale3
+
+Y3_test = Y3_test*scale3
+Y3_pred = Y3_pred*scale3
+
+plt.figure(figsize=(20,10))
+plt.plot(Y3_test, color = 'red', label = 'Actual Dogecoin Price')
+plt.plot(Y3_pred, color = 'green', label = 'Predicted Dogecoin Price')
+plt.title('Dogecoin Price Prediction')
+plt.xlabel('Time')
+plt.ylabel('Price')
+plt.legend()
+plt.show()
+--------------------------------------------------------------------------------------------------------
+
+Litecoin
+
+litecoin=data[data['Name']=='Litecoin'].copy()
+ltc_train = litecoin[litecoin['Date']<'2020-01-01'].copy()
+ltc_train
+ltc_test= litecoin[litecoin['Date']>'2020-01-01'].copy()
+ltc_test
+
+training_ltc = ltc_train.drop(['Name', 'Symbol', 'Date', ' Marketcap ', 'market_cap', 'price_diff', 'daily_price_spread'], axis= 1)
+training_ltc.head()
+
+scaler = MinMaxScaler()
+training_ltc = scaler.fit_transform(training_ltc)
+training_ltc
+
+X4_train = []
+Y4_train=[]
+
+for i in range(60, len(training_ltc)):
+  X4_train.append(training_ltc[i-60:i])
+  Y4_train.append(training_ltc[i,0])
+
+X4_train, Y4_train = np.array(X4_train), np.array(Y4_train)
+X4_train.shape
+
+model4= Sequential()
+model4.add(LSTM(units = 50, return_sequences=True, input_shape = (X4_train.shape[1], 5)))
+model4.add(Dropout(0.2))
+model4.add(LSTM(units = 50, return_sequences=True))
+model4.add(Dropout(0.2))
+model4.add(LSTM(units = 50, return_sequences=True))
+model4.add(Dropout(0.2))
+model4.add(LSTM(units = 50, return_sequences=True))
+model4.add(Dropout(0.2))
+model4.add(LSTM(units = 50))
+model4.add(Dense(units = 1))
+
+
+model4.summary()
+
+model4.compile(optimizer = 'adam', loss = 'mean_squared_error')
+model4.fit(X4_train, Y4_train, epochs = 30, batch_size =32)
+
+Test
+
+past4 = ltc_train.tail(60)
+past_ltc_df = past4.append(ltc_test, ignore_index=True)
+past_ltc_df= past_ltc_df.drop(['Name', 'Symbol', 'Date', ' Marketcap ', 'market_cap', 'price_diff', 'daily_price_spread'], axis =1)
+past_ltc_df.head()
+
+testing_ltc = scaler.transform(past_ltc_df)
+
+X4_test =[]
+Y4_test =[]
+
+for i in range(60, len(testing_ltc)):
+  X4_test.append(testing_ltc[i-60:i])
+  Y4_test.append(testing_ltc[i,0])
+
+X4_test, Y4_test = np.array(X4_test), np.array(Y4_test)
+X4_test.shape, Y4_test.shape
+
+Y4_pred= model4.predict(X4_test)
+Y4_pred, Y4_test
+
+scaler.scale_
+
+scale4 = 1/2.69164513e-03
+scale4
+
+Y4_test = Y4_test*scale4
+Y4_pred = Y4_pred*scale4
+
+plt.figure(figsize=(20,10))
+plt.plot(Y4_test, color = 'red', label = 'Actual Litecoin Price')
+plt.plot(Y4_pred, color = 'green', label = 'Predicted Litecoin Price')
+plt.title('Litecoin Price Prediction')
+plt.xlabel('Time')
+plt.ylabel('Price')
+plt.legend()
+plt.show()
+
+----------------------------------------------------------------------------------------------------
+
+##Binance Coin
+
+binancecoin= data[data['Name']=='Binance Coin'].copy()
+bnb_train= binancecoin[binancecoin['Date']<'2020-01-01'].copy()
+bnb_train
+bnb_test= binancecoin[binancecoin['Date']>'2020-01-01'].copy()
+bnb_test
+
+training_bnb = bnb_train.drop(['Name', 'Symbol', 'Date', ' Marketcap ', 'market_cap', 'price_diff', 'daily_price_spread'], axis= 1)
+training_bnb.head()
+
+scaler = MinMaxScaler()
+
+training_bnb = scaler.fit_transform(training_bnb)
+training_bnb
+
+X5_train = []
+Y5_train=[]
+
+for i in range(60, len(training_bnb)):
+  X5_train.append(training_bnb[i-60:i])
+  Y5_train.append(training_bnb[i,0])
+
+X5_train, Y5_train = np.array(X5_train), np.array(Y5_train)
+X5_train.shape
+
+model5= Sequential()
+model5.add(LSTM(units = 50, return_sequences=True, input_shape = (X5_train.shape[1], 5)))
+model5.add(Dropout(0.2))
+model5.add(LSTM(units = 50, return_sequences=True))
+model5.add(Dropout(0.2))
+model5.add(LSTM(units = 50, return_sequences=True))
+model5.add(Dropout(0.2))
+model5.add(LSTM(units = 50, return_sequences=True))
+model5.add(Dropout(0.2))
+model5.add(LSTM(units = 50))
+model5.add(Dense(units = 1))
+
+
+model5.summary()
+
+model5.compile(optimizer = 'adam', loss = 'mean_squared_error')
+model5.fit(X5_train, Y5_train, epochs = 30, batch_size =32)
+
+Test for Binance Coin
+
+past5 = bnb_train.tail(60)
+past_bnb_df = past5.append(bnb_test, ignore_index=True)
+past_bnb_df= past_bnb_df.drop(['Name', 'Symbol', 'Date', ' Marketcap ', 'market_cap', 'price_diff', 'daily_price_spread'], axis =1)
+past_bnb_df.head()
+
+testing_bnb = scaler.transform(past_bnb_df)
+
+X5_test =[]
+Y5_test =[]
+
+for i in range(60, len(testing_bnb)):
+  X5_test.append(testing_bnb[i-60:i])
+  Y5_test.append(testing_bnb[i,0])
+
+X5_test, Y5_test = np.array(X5_test), np.array(Y5_test)
+X5_test.shape, Y5_test.shape
+
+Y5_pred= model5.predict(X5_test)
+Y5_pred, Y5_test
+
+scaler.scale_
+
+scale5 = 1/2.53356980e-02
+scale5
+
+Y5_test = Y5_test*scale5
+Y5_pred = Y5_pred*scale5
+
+plt.figure(figsize=(20,10))
+plt.plot(Y5_test, color = 'red', label = 'Historical Binance Coin Price')
+plt.plot(Y5_pred, color = 'green', label = 'Predicted Binance Coin Price')
+plt.title('Binance Coin Price Prediction')
+plt.xlabel('Time')
+plt.ylabel('Price')
+plt.legend()
+plt.show()
+
+-------------------------------------------------------------------------------------
+
+##Cardano
+
+cardano= data[data['Name']=='Cardano'].copy()
+ada_train =cardano[cardano['Date']<'2020-01-01'].copy()
+ada_train
+ada_test= cardano[cardano['Date']>'2020-01-01'].copy()
+ada_test   
+
+training_ada = ada_train.drop(['Name', 'Symbol', 'Date', ' Marketcap ', 'market_cap', 'price_diff', 'daily_price_spread'], axis= 1)
+training_ada.head()
+
+
+scaler = MinMaxScaler()
+
+training_ada = scaler.fit_transform(training_ada)
+training_ada
+
+X6_train = []
+Y6_train=[]
+
+for i in range(60, len(training_ada)):
+  X6_train.append(training_ada[i-60:i])
+  Y6_train.append(training_ada[i,0])
+
+X6_train, Y6_train = np.array(X6_train), np.array(Y6_train)
+X6_train.shape
+
+model6= Sequential()
+model6.add(LSTM(units = 50, return_sequences=True, input_shape = (X6_train.shape[1], 5)))
+model6.add(Dropout(0.2))
+model6.add(LSTM(units = 50, return_sequences=True))
+model6.add(Dropout(0.2))
+model6.add(LSTM(units = 50, return_sequences=True))
+model6.add(Dropout(0.2))
+model6.add(LSTM(units = 50, return_sequences=True))
+model6.add(Dropout(0.2))
+model6.add(LSTM(units = 50))
+model6.add(Dense(units = 1))
+
+
+model6.summary()
+
+model6.compile(optimizer = 'adam', loss = 'mean_squared_error')
+model6.fit(X6_train, Y6_train, epochs = 20, batch_size =32)
+
+##Testing for Cardano
+
+past6 = ada_train.tail(60)
+past_ada_df = past6.append(ada_test, ignore_index=True)
+past_ada_df= past_ada_df.drop(['Name', 'Symbol', 'Date', ' Marketcap ', 'market_cap', 'price_diff', 'daily_price_spread'], axis =1)
+past_ada_df.head()
+
+testing_ada = scaler.transform(past_ada_df)
+
+X6_test =[]
+Y6_test =[]
+
+for i in range(60, len(testing_ada)):
+  X6_test.append(testing_ada[i-60:i])
+  Y6_test.append(testing_ada[i,0])
+
+X6_test, Y6_test = np.array(X6_test), np.array(Y6_test)
+X6_test.shape, Y6_test.shape
+
+Y6_pred= model6.predict(X6_test)
+Y6_pred, Y6_test
+
+scaler.scale_
+
+scale6=1/7.63358779e-01
+scale6
+
+Y6_test = Y6_test*scale6
+Y6_pred = Y6_pred*scale6
+
+plt.figure(figsize=(15,10))
+plt.plot(Y6_test, color = 'red', label = 'Historical Cardano Price')
+plt.plot(Y6_pred, color = 'green', label = 'Predicted Cardano Price')
+plt.title('Cardano Price Prediction')
+plt.xlabel('Time')
+plt.ylabel('Price')
+plt.legend()
+plt.show()
